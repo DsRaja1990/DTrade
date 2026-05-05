@@ -1,0 +1,33 @@
+{
+  "start_date": "2025-11-19",
+  "end_date": "2025-12-19",
+  "trading_days": 23,
+  "initial_capital": 500000.0,
+  "final_capital": 536613.2,
+  "total_return_percent": 7.32,
+  "total_trades": 115,
+  "winning_trades": 74,
+  "losing_trades": 41,
+  "win_rate": 64.35,
+  "gross_pnl": 52718.9,
+  "net_pnl": 36613.2,
+  "avg_win": 955.19,
+  "avg_loss": 830.99,
+  "profit_factor": 2.07,
+  "max_drawdown": 1.52,
+  "max_drawdown_percent": 1.52,
+  "sharpe_ratio": 8.0,
+  "avg_trade_duration": 0.7,
+  "avg_scale_count": 0.28,
+  "trades_reached_full": 2,
+  "trades_reached_aggressive": 1,
+  "instrument_stats": {
+    "NIFTY": {
+      "trades": 115,
+      "wins": 74,
+      "win_rate": 64.34782608695652,
+      "net_pnl": 36613.19583082338,
+      "avg_pnl": 318.3756159202033
+    }
+  }
+}

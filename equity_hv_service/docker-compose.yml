@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  equity-hv-service:
+    build: .
+    container_name: equity-hv-service
+    ports:
+      - "8003:8003"
+    environment:
+      - EQUITY_HV_HOST=0.0.0.0
+      - EQUITY_HV_PORT=8003
+      - EQUITY_HV_AUTO_START=true
+      - EQUITY_HV_EXECUTION_MODE=paper
+      - EQUITY_HV_LOG_LEVEL=info
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./config:/app/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - dtrade-network
+
+networks:
+  dtrade-network:
+    driver: bridge

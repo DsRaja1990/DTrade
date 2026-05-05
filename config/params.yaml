@@ -1,0 +1,38 @@
+dhan:
+  base_url: https://api.dhan.co
+  rate_limit: 1000
+  timeout: 10
+reinforcement_learning:
+  batch_size: 64
+  buffer_size: 100000
+  exploration_rate: 0.1
+  learning_rate: 0.0003
+  model_path: models/rl_hedge_agent.pkl
+  model_type: PPO
+  save_frequency: 10000
+  update_frequency: 1000
+signals:
+  confidence_threshold: 0.75
+  confirmation_timeframes:
+  - 1m
+  - 15m
+  - 1h
+  confluence_weight: 0.3
+  momentum_weight: 0.25
+  pattern_weight: 0.25
+  primary_timeframe: 5m
+  volume_weight: 0.2
+trading:
+  initial_capital: 1000000.0
+  max_daily_loss: 0.05
+  max_position_size: 0.05
+  max_positions: 10
+  max_risk_per_trade: 0.02
+  nifty_hedge_premium_diff: 50.0
+  options: {}
+  position_sizing: fixed
+  profit_target: 0.2
+  risk_free_rate: 0.065
+  sensex_hedge_premium_diff: 90.0
+  stop_loss: 0.15
+  trail_percentage: 0.05

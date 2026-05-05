@@ -1,0 +1,268 @@
+# Configuration Parameters for Intelligent Options Hedging Engine
+
+# Paper Trading Configuration
+paper_trading:
+  mode: paper
+  default_quantity: 50
+  refresh_interval_sec: 1
+  log_level: INFO
+  max_positions: 3
+  risk_per_trade: 0.02  # 2% risk per trade
+  target_win_rate: 0.95  # 95% target win rate
+  min_confidence_threshold: 0.75
+  
+  # DhanHQ API Configuration
+  api:
+    base_url: https://api.dhan.co
+    websocket_url: wss://api.dhan.co
+    timeout_seconds: 30
+    max_retries: 3
+  
+  # Instruments to monitor
+  instruments:
+    - NIFTY
+    - BANKNIFTY
+    - VIX
+    - SENSEX
+  
+  # Risk Management
+  risk_management:
+    max_loss_per_trade: -1500
+    profit_target_multiplier: 2.0
+    stop_loss_multiplier: 1.0
+    hedge_trigger_loss: -500
+    max_holding_hours: 4
+
+# Trading Parameters
+trading:
+  initial_capital: 1000000  # ₹10 Lakh
+  max_position_size: 0.05   # 5% of capital per position
+  max_daily_loss: 0.02      # 2% max daily loss
+  risk_free_rate: 0.065     # Current RBI rate
+  
+  # Options Specific
+  options:
+    max_contracts: 50
+    min_days_to_expiry: 7
+    max_days_to_expiry: 45
+    preferred_delta_range: [0.3, 0.7]
+    iv_percentile_threshold: 0.7
+    
+  # Hedging Rules
+  hedging:
+    sensex:
+      premium_spacing: 90    # ₹80-₹100 range
+      max_spacing: 100
+      min_spacing: 80
+    nifty:
+      premium_spacing: 50    # ≤₹50 spacing
+      max_spacing: 50
+      min_spacing: 25
+    
+    # Trigger Conditions
+    adverse_move_threshold: 0.015  # 1.5% adverse move
+    reversal_confirmation_bars: 3
+    momentum_strength_threshold: 0.75
+    
+  # Stacking Rules
+  stacking:
+    max_same_side_legs: 3
+    strength_score_for_stack: 0.8
+    trail_stop_percentage: 0.02
+    profit_target_multiplier: 2.0
+
+# Signal Configuration
+signals:
+  confluence_threshold: 0.75    # Minimum signal agreement
+  minimum_strength: 0.7        # Minimum signal strength
+  
+  # Technical Indicators
+  technical:
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+    
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    
+    bollinger_period: 20
+    bollinger_std: 2
+    
+    adx_period: 14
+    adx_strong_trend: 25
+    
+    volume_sma_period: 20
+    volume_spike_threshold: 2.0
+
+# AI Engine Parameters
+ai_engine:
+  # Reinforcement Learning
+  rl:
+    algorithm: "PPO"          # PPO, SAC, or DQN
+    learning_rate: 0.0003
+    gamma: 0.99              # Discount factor
+    episodes: 100000
+    batch_size: 64
+    buffer_size: 1000000
+    update_frequency: 4
+    
+    # Environment
+    environment:
+      state_space_dim: 128
+      action_space_dim: 7     # Buy CE, Buy PE, Close CE, Close PE, Stack CE, Stack PE, Hold
+      reward_shaping: true
+      penalty_for_loss: -1.0
+      reward_for_profit: 1.0
+      
+  # Neural Networks
+  neural:
+    lstm_units: 128
+    attention_heads: 8
+    dropout_rate: 0.2
+    learning_rate: 0.001
+    epochs: 100
+    
+  # Quantum Optimization
+  quantum:
+    optimization_rounds: 1000
+    convergence_threshold: 0.001
+    quantum_circuits: 10
+
+# Market Data Configuration
+market_data:
+  # Primary Data Source
+  primary_source: "dhan"
+  fallback_source: "yfinance"
+  
+  # Update Frequencies
+  real_time_interval: 1      # seconds
+  historical_lookback: 252   # trading days
+  
+  # Instruments
+  instruments:
+    nifty:
+      symbol: "NIFTY"
+      lot_size: 50
+      tick_size: 0.05
+      segment: "NSE_FNO"
+      
+    sensex:
+      symbol: "SENSEX"
+      lot_size: 10
+      tick_size: 0.05
+      segment: "BSE_FNO"
+      
+  # Options Chain
+  options_chain:
+    strikes_range: 20         # ±20 strikes from ATM
+    refresh_interval: 30      # seconds
+    
+# Risk Management
+risk_management:
+  # Position Limits
+  max_open_positions: 10
+  max_correlation: 0.7
+  
+  # Stop Loss Rules
+  stop_loss:
+    trailing_percentage: 0.02
+    max_loss_per_trade: 0.005  # 0.5% of capital
+    
+  # Volatility Controls
+  volatility:
+    max_portfolio_volatility: 0.25
+    volatility_lookback: 30    # days
+    
+  # Liquidity Filters
+  liquidity:
+    min_open_interest: 1000
+    min_volume: 500
+    max_bid_ask_spread: 0.05
+
+# Performance Tracking
+performance:
+  # Metrics
+  track_sharpe: true
+  track_sortino: true
+  track_calmar: true
+  track_max_drawdown: true
+  
+  # Benchmarks
+  benchmark_symbols: ["NIFTY", "SENSEX"]
+  
+  # Reporting
+  daily_reports: true
+  weekly_summary: true
+  monthly_analysis: true
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_rotation: "1 day"
+  max_files: 30
+  
+  # Specific Loggers
+  loggers:
+    trading: "DEBUG"
+    signals: "INFO"
+    ai_engine: "INFO"
+    risk: "WARNING"
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  reload: false
+  
+  # Rate Limiting
+  rate_limit:
+    requests_per_minute: 1000
+    burst_size: 100
+    
+  # Authentication
+  auth:
+    token_expire_hours: 24
+    secret_key_length: 32
+
+# Database Configuration  
+database:
+  url: "sqlite:///./hedging_engine.db"
+  echo: false
+  pool_size: 20
+  max_overflow: 30
+  
+  # Tables
+  tables:
+    trades: "trades"
+    signals: "signals"
+    performance: "performance"
+    positions: "positions"
+    market_data: "market_data"
+
+# Notification Configuration
+notifications:
+  enabled: true
+  
+  # Channels
+  channels:
+    email: false
+    slack: false
+    telegram: true
+    webhook: true
+    
+  # Trigger Conditions
+  triggers:
+    trade_executed: true
+    large_loss: true          # > 1% of capital
+    system_error: true
+    daily_summary: true
+
+# Development Settings
+development:
+  debug_mode: false
+  mock_trading: false        # Paper trading mode
+  data_validation: true
+  performance_profiling: false

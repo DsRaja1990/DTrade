@@ -1,0 +1,72 @@
+{
+    "initial_capital": 500000,
+    "current_capital": 500000,
+    "enabled_instruments": ["NIFTY", "SENSEX", "BANKNIFTY"],
+    "risk_config": {
+        "max_position_risk_percent": 2.0,
+        "max_daily_loss_percent": 3.0,
+        "max_concurrent_positions": 6,
+        "stop_loss_percent": 0.5,
+        "take_profit_percent": 1.0,
+        "max_exposure_percent": 60.0,
+        "vix_threshold_high": 25.0,
+        "vix_threshold_extreme": 35.0
+    },
+    "position_sizing": {
+        "mode": "institutional",
+        "use_kelly_criterion": true,
+        "kelly_fraction": 0.5,
+        "min_confidence_threshold": 0.80,
+        "max_lots_per_trade": {
+            "NIFTY": 30,
+            "BANKNIFTY": 15,
+            "FINNIFTY": 20,
+            "SENSEX": 50,
+            "BANKEX": 30,
+            "MIDCPNIFTY": 15
+        }
+    },
+    "allocation_priority": {
+        "description": "Lower number = higher priority (allocate first). BANKNIFTY last due to high premiums.",
+        "NIFTY": 1,
+        "MIDCPNIFTY": 2,
+        "SENSEX": 3,
+        "FINNIFTY": 4,
+        "BANKEX": 5,
+        "BANKNIFTY": 6
+    },
+    "lot_sizes": {
+        "description": "Verified as of December 2024 from NSE/BSE",
+        "NIFTY": 75,
+        "BANKNIFTY": 35,
+        "FINNIFTY": 65,
+        "SENSEX": 20,
+        "BANKEX": 30,
+        "MIDCPNIFTY": 140
+    },
+    "freeze_quantities": {
+        "description": "Maximum shares per single order (exchange limits)",
+        "NIFTY": 1800,
+        "BANKNIFTY": 1050,
+        "FINNIFTY": 1300,
+        "SENSEX": 1000,
+        "BANKEX": 900,
+        "MIDCPNIFTY": 2800
+    },
+    "default_atm_premiums": {
+        "description": "Fallback ATM premiums if live data unavailable",
+        "NIFTY": 150,
+        "BANKNIFTY": 350,
+        "FINNIFTY": 140,
+        "SENSEX": 250,
+        "BANKEX": 180,
+        "MIDCPNIFTY": 80
+    },
+    "last_updated": "2024-12-22T00:00:00",
+    "notes": [
+        "BANKNIFTY has highest premiums - allocate remaining capital to it",
+        "SENSEX needs 50 lots for 1000 qty (freeze limit)",
+        "All quantities must be multiples of lot size",
+        "Use order slicing for freeze quantity exceeding trades"
+    ]
+}

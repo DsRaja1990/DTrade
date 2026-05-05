@@ -1,0 +1,12 @@
+{
+  "active_instruments": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX",
+    "BANKEX"
+  ],
+  "total_capital": 500000,
+  "allocation_strategy": "equal",
+  "custom_weights": {},
+  "last_updated": "2025-12-08T22:25:27.186793"
+}

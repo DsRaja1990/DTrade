@@ -1,0 +1,992 @@
+﻿"""
+DTrade - DhanHQ Backend Service
+Production-ready backend with full Dhan API integration for portfolio, orders, positions, and holdings
+"""
+
+import asyncio
+import logging
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+
+import uvicorn
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import httpx
+import requests
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# ==================== DHAN API CONFIGURATION ====================
+# These are mutable so they can be updated at runtime via /update-token endpoint
+class DhanConfig:
+    """Mutable Dhan API configuration that can be hot-reloaded"""
+    def __init__(self):
+        self.client_id = "1101317572"
+        self.access_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY2MTI4NDc5LCJpYXQiOjE3NjYwNDIwNzksInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAxMzE3NTcyIn0.qcfoVcwbhWZGMz_wblZC7FMF1GxSy19OtWLr36rlfo0X8j-4Or6iBSEwbym-IypE7c6ype08a36c60_0S-zBBA"
+        self.api_base = "https://api.dhan.co/v2"
+
+dhan_config = DhanConfig()
+
+# ==================== REQUEST/RESPONSE MODELS ====================
+class TokenUpdateRequest(BaseModel):
+    access_token: str
+    client_id: Optional[str] = None
+
+class OrderRequest(BaseModel):
+    symbol: str
+    quantity: int
+    order_type: str = "MARKET"  # MARKET, LIMIT
+    transaction_type: str = "BUY"  # BUY, SELL
+    product_type: str = "CNC"  # CNC, INTRADAY, MARGIN, MTF
+    price: Optional[float] = None
+    trigger_price: Optional[float] = None
+    exchange: str = "NSE"
+    security_id: Optional[str] = None
+
+class ModifyOrderRequest(BaseModel):
+    order_id: str
+    quantity: Optional[int] = None
+    price: Optional[float] = None
+    order_type: Optional[str] = None
+    trigger_price: Optional[float] = None
+
+class ServiceStatus(BaseModel):
+    name: str
+    port: int
+    status: str
+    last_check: str
+
+# ==================== FASTAPI APP ====================
+app = FastAPI(
+    title="DTrade - DhanHQ Backend Service",
+    description="Production backend with Dhan API integration for trading platform",
+    version="2.0.0"
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# WebSocket connections for live updates
+active_connections: List[WebSocket] = []
+
+# ==================== DHAN API HELPER ====================
+def get_dhan_headers() -> Dict[str, str]:
+    """Get headers for Dhan API requests - uses mutable config"""
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "access-token": dhan_config.access_token,
+        "client-id": dhan_config.client_id  # Required for market feed API
+    }
+
+async def dhan_api_request(method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
+    """Make a request to Dhan API"""
+    url = f"{DHAN_API_BASE}{endpoint}"
+    headers = get_dhan_headers()
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if method.upper() == "GET":
+                response = await client.get(url, headers=headers)
+            elif method.upper() == "POST":
+                response = await client.post(url, headers=headers, json=data)
+            elif method.upper() == "PUT":
+                response = await client.put(url, headers=headers, json=data)
+            elif method.upper() == "DELETE":
+                response = await client.delete(url, headers=headers)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 401:
+                raise HTTPException(status_code=401, detail="Dhan API authentication failed. Token may be expired.")
+            else:
+                logger.error(f"Dhan API error: {response.status_code} - {response.text}")
+                return {"error": response.text, "status_code": response.status_code}
+    except httpx.RequestError as e:
+        logger.error(f"Dhan API request error: {e}")
+        raise HTTPException(status_code=503, detail=f"Dhan API unavailable: {str(e)}")
+
+# ==================== HEALTH & STATUS ENDPOINTS ====================
+@app.get("/")
+async def root():
+    return {
+        "message": "DTrade DhanHQ Backend Service",
+        "status": "running",
+        "version": "2.0.0",
+        "dhan_client_id": dhan_config.client_id
+    }
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "services": {
+            "backend": "running",
+            "dhan_api": "connected"
+        }
+    }
+
+@app.get("/api/status")
+async def api_status():
+    """Get overall API status and connected services"""
+    return {
+        "status": "operational",
+        "timestamp": datetime.now().isoformat(),
+        "dhan_client_id": dhan_config.client_id,
+        "api_version": "v2",
+        "endpoints": {
+            "portfolio": "/api/portfolio",
+            "positions": "/api/positions",
+            "holdings": "/api/holdings",
+            "orders": "/api/orders",
+            "funds": "/api/funds"
+        }
+    }
+
+# ==================== TOKEN UPDATE ENDPOINT (HOT-RELOAD) ====================
+@app.post("/update-token")
+async def update_token(request: TokenUpdateRequest):
+    """
+    Update Dhan API token at runtime WITHOUT requiring service restart.
+    This enables seamless daily token updates.
+    """
+    try:
+        old_token_prefix = dhan_config.access_token[:20] if dhan_config.access_token else "None"
+        
+        # Update in-memory config
+        dhan_config.access_token = request.access_token
+        if request.client_id:
+            dhan_config.client_id = request.client_id
+        
+        logger.info(f"Token updated: {old_token_prefix}... -> {request.access_token[:20]}...")
+        
+        # Verify token works by making a test call
+        try:
+            test_result = await dhan_api_request("GET", "/fundlimit")
+            token_valid = "error" not in test_result
+        except:
+            token_valid = False
+        
+        return {
+            "success": True,
+            "message": "Token updated successfully in memory",
+            "token_valid": token_valid,
+            "client_id": dhan_config.client_id,
+            "restart_required": False
+        }
+    except Exception as e:
+        logger.error(f"Token update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/token-status")
+async def token_status():
+    """Check current token status"""
+    token_preview = f"{dhan_config.access_token[:20]}...{dhan_config.access_token[-10:]}" if dhan_config.access_token else "Not set"
+    
+    # Test if token is valid
+    try:
+        result = await dhan_api_request("GET", "/fundlimit")
+        is_valid = "error" not in result and "status_code" not in result
+    except:
+        is_valid = False
+    
+    return {
+        "client_id": dhan_config.client_id,
+        "token_preview": token_preview,
+        "token_length": len(dhan_config.access_token) if dhan_config.access_token else 0,
+        "is_valid": is_valid,
+        "timestamp": datetime.now().isoformat()
+    }
+
+# ==================== PORTFOLIO ENDPOINTS ====================
+@app.get("/api/portfolio")
+async def get_portfolio():
+    """Get complete portfolio including holdings and positions"""
+    try:
+        holdings = await dhan_api_request("GET", "/holdings")
+        positions = await dhan_api_request("GET", "/positions")
+        
+        total_investment = 0
+        total_current_value = 0
+        total_pnl = 0
+        
+        if isinstance(holdings, list):
+            for holding in holdings:
+                buy_avg = holding.get("avgCostPrice", 0)
+                qty = holding.get("totalQty", 0)
+                ltp = holding.get("lastTradedPrice", buy_avg)
+                investment = buy_avg * qty
+                current = ltp * qty
+                total_investment += investment
+                total_current_value += current
+                total_pnl += current - investment
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "summary": {
+                "total_investment": round(total_investment, 2),
+                "current_value": round(total_current_value, 2),
+                "total_pnl": round(total_pnl, 2),
+                "pnl_percentage": round((total_pnl / total_investment * 100), 2) if total_investment > 0 else 0
+            },
+            "holdings": holdings if isinstance(holdings, list) else [],
+            "positions": positions if isinstance(positions, list) else []
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching portfolio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/holdings")
+async def get_holdings():
+    """Get all holdings from Dhan"""
+    try:
+        holdings = await dhan_api_request("GET", "/holdings")
+        
+        if isinstance(holdings, list):
+            formatted_holdings = []
+            for h in holdings:
+                formatted_holdings.append({
+                    "symbol": h.get("tradingSymbol", ""),
+                    "exchange": h.get("exchange", "NSE"),
+                    "quantity": h.get("totalQty", 0),
+                    "avg_price": h.get("avgCostPrice", 0),
+                    "ltp": h.get("lastTradedPrice", 0),
+                    "current_value": h.get("totalQty", 0) * h.get("lastTradedPrice", 0),
+                    "pnl": (h.get("lastTradedPrice", 0) - h.get("avgCostPrice", 0)) * h.get("totalQty", 0),
+                    "security_id": h.get("securityId", ""),
+                    "isin": h.get("isin", "")
+                })
+            return {"status": "success", "data": formatted_holdings, "count": len(formatted_holdings)}
+        
+        return {"status": "success", "data": holdings, "count": 0}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching holdings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/positions")
+async def get_positions():
+    """Get all open positions from Dhan"""
+    try:
+        positions = await dhan_api_request("GET", "/positions")
+        
+        if isinstance(positions, list):
+            formatted_positions = []
+            for p in positions:
+                formatted_positions.append({
+                    "symbol": p.get("tradingSymbol", ""),
+                    "exchange": p.get("exchangeSegment", "NSE"),
+                    "product_type": p.get("productType", ""),
+                    "quantity": p.get("netQty", 0),
+                    "buy_qty": p.get("buyQty", 0),
+                    "sell_qty": p.get("sellQty", 0),
+                    "buy_avg": p.get("buyAvg", 0),
+                    "sell_avg": p.get("sellAvg", 0),
+                    "ltp": p.get("ltp", 0),
+                    "realized_pnl": p.get("realizedProfit", 0),
+                    "unrealized_pnl": p.get("unrealizedProfit", 0),
+                    "total_pnl": p.get("realizedProfit", 0) + p.get("unrealizedProfit", 0),
+                    "security_id": p.get("securityId", "")
+                })
+            return {"status": "success", "data": formatted_positions, "count": len(formatted_positions)}
+        
+        return {"status": "success", "data": positions, "count": 0}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching positions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== ORDER ENDPOINTS ====================
+@app.get("/api/orders")
+async def get_orders():
+    """Get all orders for today from Dhan"""
+    try:
+        orders = await dhan_api_request("GET", "/orders")
+        
+        if isinstance(orders, list):
+            formatted_orders = []
+            for o in orders:
+                formatted_orders.append({
+                    "order_id": o.get("orderId", ""),
+                    "symbol": o.get("tradingSymbol", ""),
+                    "exchange": o.get("exchangeSegment", "NSE"),
+                    "transaction_type": o.get("transactionType", ""),
+                    "order_type": o.get("orderType", ""),
+                    "product_type": o.get("productType", ""),
+                    "quantity": o.get("quantity", 0),
+                    "filled_qty": o.get("filledQty", 0),
+                    "pending_qty": o.get("remainingQuantity", 0),
+                    "price": o.get("price", 0),
+                    "avg_price": o.get("averageTradedPrice", 0),
+                    "status": o.get("orderStatus", ""),
+                    "order_time": o.get("createTime", ""),
+                    "exchange_order_id": o.get("exchangeOrderId", "")
+                })
+            return {"status": "success", "data": formatted_orders, "count": len(formatted_orders)}
+        
+        return {"status": "success", "data": orders, "count": 0}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching orders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/orders")
+async def place_order(order: OrderRequest):
+    """Place a new order via Dhan API"""
+    try:
+        # Dhan order format
+        order_data = {
+            "dhanClientId": dhan_config.client_id,
+            "transactionType": order.transaction_type,
+            "exchangeSegment": f"{order.exchange}_EQ",
+            "productType": order.product_type,
+            "orderType": order.order_type,
+            "validity": "DAY",
+            "tradingSymbol": order.symbol,
+            "securityId": order.security_id or order.symbol,
+            "quantity": order.quantity,
+            "price": order.price or 0,
+            "triggerPrice": order.trigger_price or 0
+        }
+        
+        result = await dhan_api_request("POST", "/orders", order_data)
+        
+        if "orderId" in result:
+            return {
+                "status": "success",
+                "message": f"Order placed successfully",
+                "order_id": result.get("orderId"),
+                "data": result
+            }
+        else:
+            raise HTTPException(status_code=400, detail=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error placing order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/orders/{order_id}")
+async def modify_order(order_id: str, modification: ModifyOrderRequest):
+    """Modify an existing order"""
+    try:
+        modify_data = {
+            "dhanClientId": dhan_config.client_id,
+            "orderId": order_id
+        }
+        
+        if modification.quantity:
+            modify_data["quantity"] = modification.quantity
+        if modification.price:
+            modify_data["price"] = modification.price
+        if modification.order_type:
+            modify_data["orderType"] = modification.order_type
+        if modification.trigger_price:
+            modify_data["triggerPrice"] = modification.trigger_price
+        
+        result = await dhan_api_request("PUT", f"/orders/{order_id}", modify_data)
+        return {"status": "success", "message": "Order modified", "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error modifying order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/orders/{order_id}")
+async def cancel_order(order_id: str):
+    """Cancel a pending order"""
+    try:
+        result = await dhan_api_request("DELETE", f"/orders/{order_id}")
+        return {"status": "success", "message": "Order cancelled", "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== FUNDS ENDPOINT ====================
+@app.get("/api/funds")
+async def get_fund_limits():
+    """Get fund limits from Dhan"""
+    try:
+        funds = await dhan_api_request("GET", "/fundlimit")
+        return {"status": "success", "data": funds}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching funds: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/fundlimit")
+async def get_fundlimit():
+    """Alias for fund limits endpoint"""
+    return await get_fund_limits()
+
+# ==================== SIGNALS ENDPOINTS ====================
+@app.get("/api/signals/latest")
+async def get_signals_latest(limit: int = 20):
+    """Get latest signals from all services"""
+    import aiohttp
+    
+    all_signals = []
+    service_endpoints = [
+        ("http://localhost:4080/api/signals/latest", "Gemini"),
+        ("http://localhost:4002/api/signals", "AI Scalping"),
+        ("http://localhost:4003/api/signals", "AI Hedger"),
+        ("http://localhost:5080/api/signals", "Elite Equity"),
+    ]
+    
+    async with aiohttp.ClientSession() as session:
+        for url, source in service_endpoints:
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        signals = data.get("signals", [])
+                        for s in signals:
+                            s["source"] = source
+                        all_signals.extend(signals)
+            except Exception as e:
+                logger.debug(f"Could not fetch signals from {source}: {e}")
+    
+    # Sort by timestamp and limit
+    all_signals.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    
+    return {
+        "status": "success",
+        "signals": all_signals[:limit],
+        "count": len(all_signals[:limit]),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/api/signals/performance")
+async def get_signals_performance():
+    """Get signal performance stats"""
+    return {
+        "status": "success",
+        "data": {
+            "total_signals": 0,
+            "executed_signals": 0,
+            "win_rate": 0,
+            "avg_return": 0,
+            "timestamp": datetime.now().isoformat()
+        }
+    }
+
+@app.get("/api/signals/stats")
+async def get_signals_stats():
+    """Get signal statistics"""
+    return {
+        "status": "success",
+        "data": {
+            "by_source": {},
+            "by_instrument": {},
+            "timestamp": datetime.now().isoformat()
+        }
+    }
+
+# ==================== TRADE HISTORY ====================
+@app.get("/api/trades")
+async def get_trades():
+    """Get today's executed trades"""
+    try:
+        trades = await dhan_api_request("GET", "/trades")
+        return {"status": "success", "data": trades}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching trades: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== SERVICES STATUS (TRADING STRATEGIES) ====================
+SERVICE_PORTS = {
+    "AIScalpingService": 4002,
+    "AIOptionsHedger": 4003,
+    "GeminiTradeService": 4080,
+    "EliteEquityHVService": 5080
+}
+
+@app.get("/api/services/status")
+async def get_services_status():
+    """Get status of all trading services"""
+    services = []
+    
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for name, port in SERVICE_PORTS.items():
+            try:
+                response = await client.get(f"http://localhost:{port}/health")
+                status = "running" if response.status_code == 200 else "error"
+            except:
+                status = "stopped"
+            
+            services.append({
+                "name": name,
+                "port": port,
+                "status": status,
+                "last_check": datetime.now().isoformat()
+            })
+    
+    return {"status": "success", "services": services}
+
+# ==================== WEBSOCKET FOR LIVE UPDATES ====================
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.append(websocket)
+    logger.info(f"✅ WebSocket connected. Total connections: {len(active_connections)}")
+    
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            message = await websocket.receive_text()
+            
+            try:
+                data = json.loads(message) if message.startswith('{') else {"type": message}
+            except:
+                data = {"type": message}
+            
+            message_type = data.get("type", message)
+            
+            # Handle heartbeat ping/pong
+            if message_type == "ping":
+                await websocket.send_json({"type": "pong", "timestamp": datetime.now().timestamp()})
+            elif message_type == "positions":
+                positions = await get_positions()
+                await websocket.send_json({"type": "positions", "data": positions})
+            elif message_type == "orders":
+                orders = await get_orders()
+                await websocket.send_json({"type": "orders", "data": orders})
+            elif message_type == "portfolio":
+                portfolio = await get_portfolio()
+                await websocket.send_json({"type": "portfolio", "data": portfolio})
+            elif message_type == "funds":
+                funds = await get_fund_limits()
+                await websocket.send_json({"type": "funds", "data": funds})
+            else:
+                logger.debug(f"Unknown WebSocket message type: {message_type}")
+                
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
+        logger.info(f"🔌 WebSocket disconnected. Total connections: {len(active_connections)}")
+
+@app.websocket("/ws/live-data")
+async def websocket_live_data(websocket: WebSocket):
+    """WebSocket for live market data updates"""
+    await websocket.accept()
+    active_connections.append(websocket)
+    logger.info(f"Live data WebSocket connected. Total: {len(active_connections)}")
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
+        logger.info(f"Live data WebSocket disconnected. Total: {len(active_connections)}")
+
+async def broadcast_update(message: Dict):
+    """Broadcast update to all connected WebSocket clients"""
+    for connection in active_connections:
+        try:
+            await connection.send_json(message)
+        except:
+            pass
+
+# ==================== MARKET DATA ENDPOINTS (FOR SIGNAL ENGINE) ====================
+@app.get("/api/market/summary")
+async def get_market_summary():
+    """Get market summary data"""
+    return {
+        "nifty_price": 0,
+        "trend": "neutral",
+        "pcr": 0,
+        "max_pain": 0,
+        "avg_iv": 0,
+        "total_ce_oi": 0,
+        "total_pe_oi": 0,
+        "atm_strike": 0,
+        "timestamp": datetime.now().isoformat(),
+        "message": "Connect to trading services for live data"
+    }
+
+@app.get("/api/signals/latest")
+async def get_latest_signals(limit: int = 10):
+    """Get latest trading signals from services"""
+    signals = []
+    
+    # Try to fetch from trading services
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for name, port in SERVICE_PORTS.items():
+            try:
+                response = await client.get(f"http://localhost:{port}/api/signals")
+                if response.status_code == 200:
+                    data = response.json()
+                    if isinstance(data, list):
+                        signals.extend(data[:limit])
+                    elif "signals" in data:
+                        signals.extend(data["signals"][:limit])
+            except:
+                pass
+    
+    return {"signals": signals[:limit]}
+
+@app.get("/api/options/chain")
+async def get_option_chain():
+    """Get option chain data"""
+    return {"option_chain": {}, "message": "Connect to GeminiTradeService for live option chain"}
+
+@app.get("/api/market/nifty")
+async def get_nifty_data():
+    """Get Nifty spot price"""
+    return {"price": 0, "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/analytics/pcr")
+async def get_pcr_data():
+    """Get Put-Call Ratio data"""
+    return {"pcr": 0, "total_ce_oi": 0, "total_pe_oi": 0, "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/analytics/max-pain")
+async def get_max_pain():
+    """Get max pain data"""
+    return {"max_pain": 0, "current_price": 0, "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/analytics/iv")
+async def get_iv_data():
+    """Get IV data"""
+    return {"avg_iv": 0, "iv_percentile": 0, "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/market/stats")
+async def get_market_stats():
+    """Get market statistics with actual market hours check"""
+    from datetime import time as dt_time
+    
+    now = datetime.now()
+    current_time = now.time()
+    
+    # NSE market hours: 9:15 AM - 3:30 PM, Monday-Friday
+    market_open_time = dt_time(9, 15)
+    market_close_time = dt_time(15, 30)
+    is_weekday = now.weekday() < 5  # Monday=0, Friday=4
+    
+    is_market_open = is_weekday and market_open_time <= current_time <= market_close_time
+    
+    # Determine session
+    if not is_weekday:
+        session = "weekend"
+    elif current_time < market_open_time:
+        session = "pre-market"
+    elif current_time > market_close_time:
+        session = "post-market"
+    else:
+        session = "open"
+    
+    return {
+        "market_open": is_market_open,
+        "session": session,
+        "current_time": current_time.isoformat(),
+        "market_hours": "09:15-15:30",
+        "timestamp": now.isoformat()
+    }
+
+# ==================== REAL-TIME MARKET QUOTE ENDPOINTS (FOR SIGNAL ENGINE) ====================
+# Dhan Security IDs for indices
+INDEX_SECURITY_IDS = {
+    "NIFTY": {"security_id": "13", "exchange": "NSE_FNO", "exchange_segment": "IDX_I"},
+    "BANKNIFTY": {"security_id": "25", "exchange": "NSE_FNO", "exchange_segment": "IDX_I"},
+    "SENSEX": {"security_id": "51", "exchange": "BSE_FNO", "exchange_segment": "IDX_I"},
+    "FINNIFTY": {"security_id": "27", "exchange": "NSE_FNO", "exchange_segment": "IDX_I"},
+    "MIDCPNIFTY": {"security_id": "442", "exchange": "NSE_FNO", "exchange_segment": "IDX_I"},
+}
+
+@app.get("/api/market/quote/{instrument}")
+async def get_market_quote(instrument: str):
+    """
+    Get real-time market quote for an index instrument (NIFTY, BANKNIFTY, SENSEX, etc.)
+    Used by Signal Engine for real-time market data.
+    """
+    instrument_upper = instrument.upper()
+    
+    if instrument_upper not in INDEX_SECURITY_IDS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unknown instrument: {instrument}. Available: {list(INDEX_SECURITY_IDS.keys())}"
+        )
+    
+    config = INDEX_SECURITY_IDS[instrument_upper]
+    
+    try:
+        # Dhan Market Quote API - Use IDX_I for indices
+        url = f"{DHAN_API_BASE}/marketfeed/ltp"
+        headers = get_dhan_headers()
+        
+        # Request payload for Dhan LTP API - Use IDX_I segment for indices
+        payload = {
+            "IDX_I": [int(config["security_id"])]  # Correct segment for index data
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Dhan LTP Response for {instrument}: {data}")
+                
+                # Parse Dhan response - IDX_I format
+                ltp = 0.0
+                if "data" in data and "IDX_I" in data["data"]:
+                    idx_data = data["data"]["IDX_I"]
+                    if config["security_id"] in idx_data:
+                        ltp = float(idx_data[config["security_id"]].get("last_price", 0))
+                
+                # If no data from Dhan, try alternative endpoint
+                if ltp == 0:
+                    # Try getting from indices endpoint
+                    ltp = await _fetch_index_ltp_alternative(instrument_upper)
+                
+                return {
+                    "instrument": instrument_upper,
+                    "security_id": config["security_id"],
+                    "exchange": config["exchange"],
+                    "ltp": ltp,
+                    "open": ltp * 0.998,  # Approximate from LTP
+                    "high": ltp * 1.002,
+                    "low": ltp * 0.997,
+                    "close": ltp,
+                    "change": 0,
+                    "change_percent": 0,
+                    "volume": 0,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "dhan_api"
+                }
+            else:
+                logger.error(f"Dhan API error: {response.status_code} - {response.text}")
+                # Return fallback data
+                return await _get_fallback_quote(instrument_upper)
+                
+    except Exception as e:
+        logger.error(f"Error fetching market quote for {instrument}: {e}")
+        return await _get_fallback_quote(instrument_upper)
+
+
+async def _fetch_index_ltp_alternative(instrument: str) -> float:
+    """Alternative method to fetch index LTP using different Dhan endpoint"""
+    try:
+        # Try using the intraday chart data API
+        config = INDEX_SECURITY_IDS.get(instrument, {})
+        if not config:
+            return 0.0
+            
+        url = f"{DHAN_API_BASE}/charts/intraday"
+        headers = get_dhan_headers()
+        
+        from_date = datetime.now().strftime("%Y-%m-%d")
+        payload = {
+            "securityId": config["security_id"],
+            "exchangeSegment": config["exchange_segment"],
+            "instrument": "INDEX",
+            "fromDate": from_date,
+            "toDate": from_date
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "close" in data and data["close"]:
+                    return float(data["close"][-1])  # Last close price
+        return 0.0
+    except Exception as e:
+        logger.error(f"Alternative LTP fetch failed: {e}")
+        return 0.0
+
+
+async def _get_fallback_quote(instrument: str) -> dict:
+    """Get fallback quote when Dhan API is unavailable"""
+    # Typical market values for fallback
+    fallback_prices = {
+        "NIFTY": 24500.0,
+        "BANKNIFTY": 52500.0,
+        "SENSEX": 81000.0,
+        "FINNIFTY": 23800.0,
+        "MIDCPNIFTY": 12500.0,
+    }
+    
+    price = fallback_prices.get(instrument, 20000.0)
+    
+    return {
+        "instrument": instrument,
+        "security_id": INDEX_SECURITY_IDS.get(instrument, {}).get("security_id", "0"),
+        "exchange": INDEX_SECURITY_IDS.get(instrument, {}).get("exchange", "NSE"),
+        "ltp": price,
+        "open": price * 0.998,
+        "high": price * 1.002,
+        "low": price * 0.997,
+        "close": price,
+        "change": 0,
+        "change_percent": 0,
+        "volume": 0,
+        "timestamp": datetime.now().isoformat(),
+        "source": "fallback",
+        "warning": "Using fallback data - Dhan API unavailable"
+    }
+
+
+@app.get("/api/market/intraday/{instrument}")
+async def get_intraday_data(instrument: str, interval: str = "5"):
+    """
+    Get intraday OHLC data for an instrument.
+    interval: 1, 5, 15, 25, 60 minutes
+    """
+    instrument_upper = instrument.upper()
+    
+    if instrument_upper not in INDEX_SECURITY_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown instrument: {instrument}. Available: {list(INDEX_SECURITY_IDS.keys())}"
+        )
+    
+    config = INDEX_SECURITY_IDS[instrument_upper]
+    
+    try:
+        url = f"{DHAN_API_BASE}/charts/intraday"
+        headers = get_dhan_headers()
+        
+        from_date = datetime.now().strftime("%Y-%m-%d")
+        payload = {
+            "securityId": config["security_id"],
+            "exchangeSegment": config["exchange_segment"],
+            "instrument": "INDEX",
+            "interval": interval,
+            "fromDate": from_date,
+            "toDate": from_date
+        }
+        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Parse Dhan intraday response
+                candles = []
+                if "open" in data and "high" in data and "low" in data and "close" in data:
+                    timestamps = data.get("timestamp", [])
+                    opens = data.get("open", [])
+                    highs = data.get("high", [])
+                    lows = data.get("low", [])
+                    closes = data.get("close", [])
+                    volumes = data.get("volume", [])
+                    
+                    for i in range(len(opens)):
+                        candles.append({
+                            "timestamp": timestamps[i] if i < len(timestamps) else None,
+                            "open": opens[i],
+                            "high": highs[i],
+                            "low": lows[i],
+                            "close": closes[i],
+                            "volume": volumes[i] if i < len(volumes) else 0
+                        })
+                
+                return {
+                    "instrument": instrument_upper,
+                    "interval": interval,
+                    "candles": candles,
+                    "count": len(candles),
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "dhan_api"
+                }
+            else:
+                logger.error(f"Dhan intraday API error: {response.status_code}")
+                return {
+                    "instrument": instrument_upper,
+                    "interval": interval,
+                    "candles": [],
+                    "count": 0,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "error",
+                    "error": response.text
+                }
+                
+    except Exception as e:
+        logger.error(f"Error fetching intraday data: {e}")
+        return {
+            "instrument": instrument_upper,
+            "interval": interval,
+            "candles": [],
+            "count": 0,
+            "timestamp": datetime.now().isoformat(),
+            "source": "error",
+            "error": str(e)
+        }
+
+
+# ==================== MAIN ENTRY ====================
+def main():
+    """Run the DhanHQ backend server"""
+    print("=" * 60)
+    print("🚀 DTrade DhanHQ Backend Service")
+    print("=" * 60)
+    print(f"📊 Dhan Client ID: {dhan_config.client_id}")
+    print(f"🌐 Server: http://localhost:8000")
+    print("=" * 60)
+    print("📋 API Endpoints:")
+    print("   GET  /health             - Health check")
+    print("   GET  /api/portfolio      - Complete portfolio")
+    print("   GET  /api/holdings       - Holdings")
+    print("   GET  /api/positions      - Open positions")
+    print("   GET  /api/orders         - Today's orders")
+    print("   POST /api/orders         - Place order")
+    print("   PUT  /api/orders/{id}    - Modify order")
+    print("   DEL  /api/orders/{id}    - Cancel order")
+    print("   GET  /api/funds          - Fund limits")
+    print("   GET  /api/fundlimit      - Fund limits (alias)")
+    print("   GET  /api/trades         - Today's trades")
+    print("   GET  /api/market/quote/{instrument} - Real-time quote")
+    print("   GET  /api/market/intraday/{instrument} - Intraday OHLC")
+    print("   GET  /api/services/status - Trading services status")
+    print("   WS   /ws                 - WebSocket for live updates")
+    print("=" * 60)
+    print("⚡ Press Ctrl+C to stop")
+    print()
+    
+    try:
+        uvicorn.run(
+            "dhan_backend:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=False,
+            log_level="info"
+        )
+    except KeyboardInterrupt:
+        print("\n🛑 Server stopped")
+    except Exception as e:
+        print(f"❌ Server error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

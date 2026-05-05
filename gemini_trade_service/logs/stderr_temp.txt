@@ -1,0 +1,84 @@
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'
+Traceback (most recent call last):
+  File "C:\Users\Dhanasimmaraja\Documents\TradeApp\DTrade\gemini_trade_service\..\gemini_trade_service\main.py", line 8, in <module>
+    from flask import Flask, jsonify, request
+ModuleNotFoundError: No module named 'flask'

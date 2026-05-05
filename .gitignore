@@ -1,0 +1,10 @@
+# Add config.json to gitignore to protect sensitive data
+config.json
+service_config.json
+*.pyc
+__pycache__/
+.env
+.venv
+venv/
+*.log
+.DS_Store

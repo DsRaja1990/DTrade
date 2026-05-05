@@ -1,0 +1,11 @@
+{
+  "service_name": "Intelligent Options Hedger",
+  "strategies_tested": 7,
+  "total_return": 0.14746152846177019,
+  "win_rate": 0.6546770487121383,
+  "total_trades": 170,
+  "max_drawdown": 0.11642921100330053,
+  "sharpe_ratio": 1.9387250874345812,
+  "execution_time": "2025-07-14T19:18:56.727162",
+  "status": "completed"
+}

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  index-scalping-service:
+    build: .
+    container_name: index_scalping_service
+    ports:
+      - "8003:8003"
+    environment:
+      - INDEX_SCALPING_PORT=8003
+      - INDEX_SCALPING_HOST=0.0.0.0
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./config:/app/config
+    restart: unless-stopped
+    networks:
+      - dtrade-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  dtrade-network:
+    external: true
+    name: dtrade_network

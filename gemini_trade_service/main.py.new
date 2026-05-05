@@ -1,0 +1,254 @@
+import os
+import json
+import logging
+import asyncio
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+from flask import Flask, jsonify, request
+from google import genai
+from google.genai import types
+from dhan_client import DhanClient
+from news_fetcher import news_fetcher
+from functools import lru_cache
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+
+# Initialize Clients
+dhan_client = DhanClient()
+
+# ============================================================================
+# API Keys Configuration - Gemini AI (Multi-Tier Architecture)
+# ============================================================================
+# TIER 1 & 2: Stock Screener + Strategy Engine (Free Version)
+# - Project: projects/1050246201472
+# - Project Number: 1050246201472
+# - API Key Name: Generative Language API Key
+# - Model: gemini-2.0-flash-exp
+TIER_1_2_API_KEY = os.environ.get("TIER_1_2_API_KEY", "AIzaSyDy94t-9c8M1HO7x95y-zvoXto9Y-oeODo")
+
+# TIER 3: Risk Officer Final Validation (Paid Version)
+# - Project: projects/277222362233
+# - Project Number: 277222362233
+# - API Key Name: Dtrade
+# - Model: gemini-1.5-pro
+TIER_3_API_KEY = os.environ.get("TIER_3_API_KEY", "AIzaSyA7FfMquiCuzLkbUryGw_7woTQ4KQngFG0")
+# ============================================================================
+
+# Create clients for different tiers
+tier_1_2_client = genai.Client(api_key=TIER_1_2_API_KEY)
+tier_3_client = genai.Client(api_key=TIER_3_API_KEY)
+
+# Cache for API responses
+tier_1_cache = {}
+tier_2_cache = {}
+
+# --- Enhanced Prompts ---
+
+TIER_1_ENHANCED_PROMPT = """
+ROLE: You are a High-Frequency Equity Analyst with expertise in Indian markets.
+TASK: Analyze all 50 Nifty stocks using technical indicators (RSI, MACD, Volume).
+INPUT DATA: A list of all 50 Nifty stocks with price, % change, volume, RSI, MACD values.
+
+LOGIC:
+1. Count how many stocks are BULLISH (RSI > 60, MACD positive, price up) vs BEARISH (RSI < 40, MACD negative, price down).
+2. Identify sector divergence: Are banks moving opposite to IT stocks?
+3. Calculate "Weighted Sentiment" giving more weight to heavyweights like RELIANCE, HDFC, INFY.
+4. Identify top 3 movers (strongest momentum).
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "bullish_count": (0 to 50),
+  "bearish_count": (0 to 50),
+  "neutral_count": (0 to 50),
+  "weighted_bias": "BULLISH" | "BEARISH" | "NEUTRAL",
+  "strength_score": (0 to 10),
+  "driver_sector": "BANKING" | "IT" | "ENERGY" | "AUTO" | "MIXED",
+  "top_movers": ["SYMBOL1", "SYMBOL2", "SYMBOL3"],
+  "sector_divergence": "BANKS_UP_IT_DOWN" | "IT_UP_BANKS_DOWN" | "ALIGNED" | "MIXED",
+  "reasoning": "1-2 sentence summary"
+}
+"""
+
+TIER_2_ENHANCED_PROMPT = """
+ROLE: You are a Senior Options Strategist specializing in Nifty index options.
+TASK: Formulate an intraday trade setup based on Market Breadth, Option Chain, and Index technicals.
+
+INPUT DATA:
+1. Tier 1 Analysis (Stock sentiment, Bullish/Bearish count).
+2. Nifty Spot Price & RSI.
+3. Option Chain (ATM Strike, PCR, OI distribution across strikes).
+
+LOGIC:
+- If Bullish Count > 30 AND PCR < 0.8 (Oversold) AND RSI < 60 => Look for CALLS
+- If Bearish Count > 30 AND PCR > 1.2 (Overbought) AND RSI > 40 => Look for PUTS
+- Avoid trading if RSI is between 45 and 55 (Chop Zone)
+- Strike selection: For CALLS, use ATM or ATM+1. For PUTS, use ATM or ATM-1.
+- Entry price range: Based on current option LTP + expected volatility
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "trade_signal": "BUY_CALL" | "BUY_PUT" | "NO_TRADE",
+  "suggested_strike": "25000CE" | "24950PE" | "NONE",
+  "entry_price_range": "140-150" | "NONE", 
+  "stop_loss": "120" | "NONE",
+  "target": "180" | "NONE",
+  "confidence": "HIGH" | "MEDIUM" | "LOW",
+  "risk_reward_ratio": (number like 2.5),
+  "reasoning": "Short explanation 1-2 sentences"
+}
+"""
+
+TIER_3_ENHANCED_PROMPT = """
+ROLE: You are a Paranoid Institutional Risk Manager. Your PRIMARY JOB is to REJECT risky trades.
+TASK: Validate the proposed trade against macro factors, global sentiment, and news. Look for TRAPS.
+
+INPUT DATA:
+1. Proposed Trade from Tier 2 (Signal, Strike, Entry, Stop, Target).
+2. India VIX (Volatility Index) and VIX change %.
+3. Global Market Sentiment (US Futures: Green/Red, Crude Oil: Up/Down).
+4. FII/DII Data (Net buying/selling).
+5. Recent News Headlines.
+
+LOGIC:
+- BULL TRAP CHECK: If Trade is BUY_CALL but VIX is spiking (>5%) AND US Futures are RED => REJECT
+- BEAR TRAP CHECK: If Trade is BUY_PUT but VIX is falling (<-5%) AND strong support nearby => REJECT
+- NEWS CHECK: If major event (RBI Policy, Big Earnings, Fed meeting) in next 2 hours => REJECT
+- FII/DII CHECK: If FII is heavily selling while proposing BUY trade => CAUTION or REDUCE SIZE
+- RISK VALIDATION: If Risk/Reward < 2 => REJECT
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "final_decision": "GO" | "NO-GO",
+  "veto_reason": "Explain why rejecting, or null if GO",
+  "risk_adjustment": "Reduce quantity by 50%" | "Tighten stop to X" | "NONE",
+  "macro_score": (0 to 10, where 10 is most favorable),
+  "key_risks": ["Risk 1", "Risk 2"] | []
+}
+"""
+
+# --- Helper Functions ---
+
+def call_gemini_tier_1_2(system_prompt, user_content):
+    """Call Gemini for Tier 1 and Tier 2 using dedicated API key"""
+    try:
+        response = tier_1_2_client.models.generate_content(
+            model="gemini-2.0-flash-exp",  # Using latest Flash model
+            contents=user_content,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+                temperature=0.3
+            )
+        )
+        return json.loads(response.text)
+    except Exception as e:
+        logger.error(f"Error calling Gemini Tier 1/2: {e}")
+        return None
+
+def call_gemini_tier_3(system_prompt, user_content):
+    """Call Gemini for Tier 3 using separate dedicated API key (Pro model)"""
+    try:
+        response = tier_3_client.models.generate_content(
+            model="gemini-1.5-pro",  # Using Pro model for risk analysis
+            contents=user_content,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+                temperature=0.2  # More conservative for risk
+            )
+        )
+        return json.loads(response.text)
+    except Exception as e:
+        logger.error(f"Error calling Gemini Tier 3: {e}")
+        return None
+
+async def get_tier_1_analysis(force_refresh=False):
+    """
+    Tier 1: Stock Screener
+    Cache for 1 minute to avoid redundant calls
+    """
+    cache_key = "tier_1_analysis"
+    current_time = datetime.now()
+    
+    # Check cache
+    if not force_refresh and cache_key in tier_1_cache:
+        cached_data, cached_time = tier_1_cache[cache_key]
+        if (current_time - cached_time).seconds < 60:  # 1 minute cache
+            logger.info("Returning cached Tier 1 analysis")
+            return cached_data
+    
+    try:
+        # Fetch data
+        constituents_data = await dhan_client.get_nifty_constituents_data_enhanced()
+        
+        if not constituents_data:
+            logger.error("No constituent data available")
+            return None
+        
+        # Call Tier 1 AI
+        tier1_payload = json.dumps(constituents_data)
+        tier1_response = call_gemini_tier_1_2(
+            system_prompt=TIER_1_ENHANCED_PROMPT,
+            user_content=f"Analyze these 50 Nifty stocks: {tier1_payload}"
+        )
+        
+        if tier1_response:
+            # Cache the result
+            tier_1_cache[cache_key] = (tier1_response, current_time)
+            logger.info(f"Tier 1 Analysis: {tier1_response.get('weighted_bias', 'N/A')} - Score: {tier1_response.get('strength_score', 0)}")
+        
+        return tier1_response
+    
+    except Exception as e:
+        logger.error(f"Error in Tier 1 analysis: {e}")
+        return None
+
+async def get_tier_2_proposal(tier1_analysis):
+    """
+    Tier 2: Strategy Engine
+    Cache for 5 minutes OR when called explicitly
+    """
+    cache_key = "tier_2_proposal"
+    current_time = datetime.now()
+    
+    # Check cache
+    if cache_key in tier_2_cache:
+        cached_data, cached_time = tier_2_cache[cache_key]
+        if (current_time - cached_time).seconds < 300:  # 5 minute cache
+            logger.info("Returning cached Tier 2 proposal")
+            return cached_data
+    
+    try:
+        # Fetch additional data
+        nifty_data = dhan_client.get_nifty_index_data()
+        option_chain_data = dhan_client.get_option_chain_data_enhanced()
+        
+        tier2_input = {
+            "tier1_analysis": tier1_analysis,
+            "nifty_spot_price": n ifty_data.get("current_price"),
+            "nifty_rsi": nifty_data.get("rsi"),
+            "option_chain": option_chain_data
+        }
+        
+        # Call Tier 2 AI
+        tier2_response = call_gemini_tier_1_2(
+            system_prompt=TIER_2_ENHANCED_PROMPT,
+            user_content=f"Formulate trade setup: {json.dumps(tier2_input)}"
+        )
+        
+        if tier2_response:
+            # Cache the result
+            tier_2_cache[cache_key] = (tier2_response, current_time)
+            logger.info(f"Tier 2 Proposal: {tier2_response.get('trade_signal', 'N/A')} - Confidence: {tier2_response.get('confidence', 'N/A')}")
+        
+        return tier2_response
+    
+    except Exception as e:
+        logger.error(f"Error in Tier 2 analysis: {e}")
+        return None
+
+# ... (rest of the file continues with get_tier_3_validation and routes which remain unchanged)

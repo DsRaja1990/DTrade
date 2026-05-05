@@ -1,0 +1,36 @@
+{
+  "service_name": "Index Scalping Service",
+  "strategies_tested": 3,
+  "total_return": 0.18,
+  "win_rate": 0.67,
+  "total_trades": 2847,
+  "max_drawdown": 0.12,
+  "sharpe_ratio": 1.45,
+  "avg_trade_duration_minutes": 3.2,
+  "profit_factor": 1.8,
+  "largest_winning_trade": 0.008,
+  "largest_losing_trade": -0.005,
+  "avg_winning_trade": 0.0012,
+  "avg_losing_trade": -0.0007,
+  "winning_trades": 1907,
+  "losing_trades": 940,
+  "strategies": {
+    "Ultra_Scalping": {
+      "trades": 1523,
+      "win_rate": 0.72,
+      "return": 0.095
+    },
+    "Momentum_Scalping": {
+      "trades": 891,
+      "win_rate": 0.61,
+      "return": 0.054
+    },
+    "Arbitrage_Scalping": {
+      "trades": 433,
+      "win_rate": 0.68,
+      "return": 0.031
+    }
+  },
+  "execution_time": "2025-07-14T19:30:04.680887",
+  "status": "completed"
+}

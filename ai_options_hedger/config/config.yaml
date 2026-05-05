@@ -1,0 +1,343 @@
+# Intelligent Options Hedging Engine Configuration
+
+# Logging Configuration
+logging:
+  log_level: "INFO"
+  log_dir: "logs"
+  max_file_size: "50MB"
+  backup_count: 30
+  structured_logging: true
+  performance_logging: true
+
+# Notification Configuration
+notifications:
+  enabled_channels: ["console", "telegram", "email"]
+  notification_rules:
+    min_level: "WARNING"
+    channels_by_level:
+      critical: ["email", "telegram", "slack"]
+      error: ["email", "telegram"]
+      warning: ["telegram"]
+      trade: ["telegram", "slack"]
+      signal: ["telegram"]
+      info: ["console"]
+  rate_limits:
+    ERROR:
+      max_per_hour: 10
+    WARNING:
+      max_per_hour: 20
+  
+  # Email Configuration
+  email:
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    username: "your_email@gmail.com"
+    password: "your_app_password"
+    from_email: "your_email@gmail.com"
+    to_emails: ["alerts@yourcompany.com"]
+  
+  # Telegram Configuration
+  telegram:
+    bot_token: "your_telegram_bot_token"
+    chat_ids: ["your_chat_id"]
+  
+  # Slack Configuration
+  slack:
+    webhook_url: "your_slack_webhook_url"
+    channel: "#trading-alerts"
+    username: "Options Hedger"
+
+# Broker Configuration
+brokers:
+  dhan:
+    enabled: true
+    primary: true
+    client_id: "your_dhan_client_id"
+    access_token: "your_dhan_access_token"
+    base_url: "https://api.dhan.co"
+    rate_limit: 100  # requests per second
+    timeout: 30  # seconds
+  
+  mock:
+    enabled: true  # For testing
+    primary: false
+
+# DhanHQ API Configuration
+dhan_api:
+  client_id: "your_dhan_client_id"
+  access_token: "your_dhan_access_token"
+  base_url: "https://api.dhan.co"
+  websocket_url: "wss://api.dhan.co/ws"
+  symbols: ["NIFTY", "BANKNIFTY"]
+  update_interval: 0.1  # seconds
+  reconnect_attempts: 5
+  rate_limit:
+    orders_per_second: 10
+    data_requests_per_second: 100
+
+# Microstructure Analysis Configuration
+microstructure:
+  order_book:
+    enabled: true
+    analysis_window: 100  # ticks
+    imbalance_threshold: 0.3
+    volume_threshold: 1000
+    update_frequency: 0.5  # seconds
+  
+  hft_breakout:
+    enabled: true
+    lookback_window: 500  # ticks
+    volatility_threshold: 2.0
+    volume_spike_threshold: 3.0
+    price_momentum_threshold: 0.05
+  
+  market_depth:
+    enabled: true
+    depth_levels: 10
+    liquidity_threshold: 10000
+    spread_threshold: 0.1
+    flow_analysis_window: 1000
+
+# AI Engine Configuration
+ai_engine:
+  neuro_symbolic:
+    enabled: true
+    model_path: "models/neuro_symbolic"
+    training_data_window: 10000
+    retrain_frequency: 3600  # seconds
+    confidence_threshold: 0.7
+  
+  quantum_optimization:
+    enabled: true
+    optimization_algorithm: "QAOA"
+    max_iterations: 100
+    convergence_threshold: 1e-6
+    parallel_jobs: 4
+  
+  self_evolving:
+    enabled: true
+    evolution_frequency: 1800  # seconds
+    population_size: 50
+    mutation_rate: 0.1
+    crossover_rate: 0.7
+    fitness_window: 1000
+  
+  reinforcement_learning:
+    enabled: true
+    algorithm: "PPO"  # or "DQN", "A3C"
+    learning_rate: 0.0001
+    batch_size: 64
+    replay_buffer_size: 100000
+    update_frequency: 100
+    target_update_frequency: 1000
+    exploration_rate: 0.1
+    exploration_decay: 0.995
+  
+  multi_agent:
+    enabled: true
+    agents:
+      - name: "DirectionalAgent"
+        type: "trend_following"
+        allocation: 0.4
+      - name: "MeanReversionAgent"
+        type: "mean_reversion"
+        allocation: 0.3
+      - name: "VolatilityAgent"
+        type: "volatility_trading"
+        allocation: 0.3
+    coordination_method: "auction"
+    rebalance_frequency: 900  # seconds
+
+# Signal Configuration
+signals:
+  confluence_engine:
+    enabled: true
+    signal_sources:
+      - "technical_indicators"
+      - "order_book_imbalance"
+      - "hft_breakout"
+      - "market_depth"
+      - "neuro_symbolic"
+      - "rl_agent"
+    weighting_method: "dynamic"
+    confidence_threshold: 0.6
+    signal_timeout: 300  # seconds
+  
+  technical_indicators:
+    rsi_period: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bollinger_period: 20
+    bollinger_std: 2
+    atr_period: 14
+
+# Strategy Configuration
+strategies:
+  adaptive_selector:
+    enabled: true
+    strategy_pool:
+      - "delta_neutral"
+      - "gamma_scalping"
+      - "iron_condor"
+      - "butterfly"
+      - "straddle"
+      - "strangle"
+    selection_method: "ml_based"
+    reselection_frequency: 1800  # seconds
+    performance_window: 5000
+  
+  volatility_crush:
+    enabled: true
+    iv_percentile_threshold: 80
+    earnings_calendar_enabled: true
+    event_detection_window: 7  # days
+    pre_event_exit_hours: 2
+    post_event_entry_hours: 1
+  
+  trade_executor:
+    enabled: true
+    max_position_size: 100
+    max_daily_trades: 50
+    risk_per_trade: 0.02  # 2% of portfolio
+    stop_loss_percent: 0.05  # 5%
+    take_profit_percent: 0.1  # 10%
+    order_timeout: 300  # seconds
+    slippage_tolerance: 0.001  # 0.1%
+
+# Risk Management Configuration
+risk_management:
+  max_portfolio_risk: 0.1  # 10% VaR
+  max_single_position_risk: 0.05  # 5%
+  max_drawdown: 0.15  # 15%
+  leverage_limit: 3.0
+  correlation_limit: 0.7
+  concentration_limit: 0.2  # 20% in single symbol
+  
+  stop_loss:
+    enabled: true
+    portfolio_stop_loss: 0.1  # 10%
+    daily_stop_loss: 0.05  # 5%
+    individual_stop_loss: 0.03  # 3%
+  
+  position_sizing:
+    method: "kelly_criterion"  # or "fixed_percent", "volatility_adjusted"
+    base_size: 0.02  # 2% of portfolio
+    max_size: 0.1  # 10% of portfolio
+    volatility_lookback: 30
+
+# Evaluation Configuration
+evaluation:
+  performance:
+    enabled: true
+    metrics:
+      - "total_return"
+      - "sharpe_ratio"
+      - "max_drawdown"
+      - "win_rate"
+      - "profit_factor"
+      - "calmar_ratio"
+      - "sortino_ratio"
+    benchmark: "NIFTY50"
+    reporting_frequency: 3600  # seconds
+  
+  risk_assessment:
+    enabled: true
+    var_confidence: 0.95
+    stress_test_scenarios: 10
+    monte_carlo_simulations: 1000
+    correlation_lookback: 60  # days
+    volatility_lookback: 30  # days
+
+# Dashboard Configuration
+dashboard:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  auto_refresh: 30  # seconds
+  websocket_enabled: true
+  authentication_required: false
+  
+  features:
+    real_time_pnl: true
+    risk_metrics: true
+    trade_history: true
+    signal_analysis: true
+    model_performance: true
+    market_data: true
+
+# Database Configuration
+database:
+  type: "sqlite"  # or "postgresql", "mysql"
+  path: "data/hedging_engine.db"
+  backup_frequency: 3600  # seconds
+  retention_days: 90
+  
+  # For PostgreSQL/MySQL
+  # host: "localhost"
+  # port: 5432
+  # username: "hedger"
+  # password: "your_password"
+  # database: "options_hedging"
+
+# Data Storage Configuration
+data_storage:
+  market_data_retention: 30  # days
+  trade_data_retention: 365  # days
+  signal_data_retention: 7  # days
+  log_retention: 30  # days
+  
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 6
+
+# Security Configuration
+security:
+  encryption:
+    enabled: true
+    algorithm: "AES-256"
+    key_rotation_days: 30
+  
+  api_security:
+    rate_limiting: true
+    ip_whitelist: []
+    api_key_required: false
+  
+  audit_logging:
+    enabled: true
+    log_all_trades: true
+    log_configuration_changes: true
+    log_user_actions: true
+
+# Trading Hours Configuration
+trading_hours:
+  market_open: "09:15"
+  market_close: "15:30"
+  pre_market_start: "09:00"
+  post_market_end: "16:00"
+  timezone: "Asia/Kolkata"
+  
+  trading_days:
+    - "monday"
+    - "tuesday"
+    - "wednesday"
+    - "thursday"
+    - "friday"
+  
+  holidays: []  # Add market holidays
+
+# Development Configuration
+development:
+  debug_mode: false
+  test_mode: false
+  paper_trading: true
+  verbose_logging: false
+  profiling_enabled: false
+  
+  simulation:
+    enabled: false
+    start_date: "2024-01-01"
+    end_date: "2024-12-31"
+    initial_capital: 1000000
+    commission_per_trade: 20

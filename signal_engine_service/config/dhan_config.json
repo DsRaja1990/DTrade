@@ -1,0 +1,37 @@
+﻿{
+    "access_token":  "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY2MjEyMzAxLCJpYXQiOjE3NjYxMjU5MDEsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAxMzE3NTcyIn0.oTZr9N5p6wj8givgxWSwctGF8SnYVJtXY2aBw7lOwJccnBQmyQhAGAo_07L3MZspj7IedKZe5e0IytO6cmPxJQ",
+    "client_id":  "1101317572",
+    "dhan_access_token":  "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzY2MTI4NDc5LCJpYXQiOjE3NjYwNDIwNzksInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAxMzE3NTcyIn0.qcfoVcwbhWZGMz_wblZC7FMF1GxSy19OtWLr36rlfo0X8j-4Or6iBSEwbym-IypE7c6ype08a36c60_0S-zBBA",
+    "dhan_client_id":  "1101317572",
+    "instruments":  {
+                        "NIFTY":  {
+                                      "exchange":  "NSE",
+                                      "symbol":  "NIFTY 50",
+                                      "security_id":  "26000",
+                                      "lot_size":  50
+                                  },
+                        "BANKNIFTY":  {
+                                          "exchange":  "NSE",
+                                          "symbol":  "NIFTY BANK",
+                                          "security_id":  "26009",
+                                          "lot_size":  15
+                                      },
+                        "SENSEX":  {
+                                       "exchange":  "BSE",
+                                       "symbol":  "SENSEX",
+                                       "security_id":  "1",
+                                       "lot_size":  10
+                                   }
+                    },
+    "market_data":  {
+                        "refresh_interval_seconds":  1,
+                        "websocket_enabled":  true,
+                        "fallback_to_rest":  true
+                    },
+    "service":  {
+                    "port":  4090,
+                    "log_level":  "INFO",
+                    "signal_refresh_seconds":  60,
+                    "market_hours_only":  true
+                }
+}

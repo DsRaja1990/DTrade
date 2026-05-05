@@ -1,0 +1,16 @@
+{
+  "total_capital": 500000.0,
+  "max_exposure_pct": 0.8,
+  "max_single_trade_pct": 1.0,
+  "min_cash_reserve_pct": 0.1,
+  "max_daily_loss_pct": 0.05,
+  "max_positions": 5,
+  "risk_level": 0.03,
+  "enabled_instruments": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX",
+    "MIDCPNIFTY"
+  ],
+  "last_updated": "2025-12-08T17:10:13.298444"
+}
